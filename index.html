@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TokenMax — AI Usage Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #07090f; color: #e2e8f0; margin: 0; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .card { background: #0f1623; border: 1px solid #1a2234; border-radius: 12px; }
+
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.2} }
+    .pulse { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+    @keyframes slide-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .slide-in { animation: slide-in .3s ease-out; }
+
+    @keyframes flash-red { 0%,100%{background:rgba(239,68,68,.08)} 50%{background:rgba(239,68,68,.18)} }
+    .flash-alert { animation: flash-red 1.6s ease-in-out 3; }
+
+    @keyframes count-up { from{opacity:.4;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
+    .count-bump { animation: count-up .25s ease-out; }
+
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+
+    .bar-fill { transition: width .6s cubic-bezier(.4,0,.2,1); }
+
+    .tier-badge {
+      font-size: 9px; font-family: 'JetBrains Mono', monospace;
+      padding: 1px 5px; border-radius: 3px; font-weight: 700; letter-spacing: .04em;
+    }
+    .tier-pro   { background: #1e293b; color: #64748b; }
+    .tier-max5  { background: #1e3a5f; color: #60a5fa; }
+    .tier-max20 { background: #2e1065; color: #c084fc; }
+  </style>
+</head>
+<body class="min-h-screen p-5">
+
+  <!-- ── Header ── -->
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-xl font-bold tracking-tight">
+          <span class="text-cyan-400">Token</span><span class="text-white">Max</span>
+        </h1>
+        <span class="text-xs text-gray-600 border border-gray-800 rounded px-2 py-0.5">Meridian Systems · 100 employees</span>
+      </div>
+      <p class="text-[11px] text-gray-600 mt-0.5">AI Token Usage Intelligence · June 2026</p>
+    </div>
+    <div class="flex items-center gap-5">
+      <!-- Budget burn warning -->
+      <div class="text-right">
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider">Monthly Budget</div>
+        <div class="mono text-sm font-bold text-white">$120,000 <span class="text-red-400 text-xs" id="budget-pct">74% burned</span></div>
+        <div class="w-full bg-gray-800 rounded-full h-1 mt-1">
+          <div id="budget-bar" class="h-1 rounded-full bg-gradient-to-r from-orange-500 to-red-500 bar-fill" style="width:74%"></div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 pl-5 border-l border-gray-800">
+        <div class="w-2 h-2 rounded-full bg-emerald-400 pulse"></div>
+        <span class="text-xs text-emerald-400 mono font-bold">LIVE</span>
+      </div>
+      <div class="text-xs text-gray-500 mono" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- ── KPI Row ── -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+
+    <div class="card p-4">
+      <div class="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Total Monthly Spend</div>
+      <div class="mono text-3xl font-bold text-white" id="kpi-spend">$0</div>
+      <div class="flex items-center gap-1.5 mt-2">
+        <span class="text-red-400 text-xs mono">↑ 18.3%</span>
+        <span class="text-gray-600 text-[10px]">vs last month</span>
+      </div>
+      <div class="text-[10px] text-gray-600 mt-1">Projected: <span class="text-orange-400 mono" id="kpi-projected">$0</span> EOM</div>
+    </div>
+
+    <div class="card p-4">
+      <div class="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Tokens Consumed</div>
+      <div class="mono text-3xl font-bold text-cyan-400" id="kpi-tokens">0</div>
+      <div class="flex items-center gap-1.5 mt-2">
+        <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 pulse"></div>
+        <span class="text-cyan-600 text-xs mono" id="kpi-tps">0/s</span>
+        <span class="text-gray-600 text-[10px]">live velocity</span>
+      </div>
+      <div class="text-[10px] text-gray-600 mt-1">Avg per employee: <span class="text-cyan-600 mono" id="kpi-avg-tok">0</span></div>
+    </div>
+
+    <div class="card p-4 relative overflow-hidden">
+      <div class="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Quota Hits Today</div>
+      <div class="mono text-3xl font-bold text-orange-400" id="kpi-maxed">0</div>
+      <div class="text-gray-600 text-xs mt-2">employees hit their 5-hr limit</div>
+      <div class="text-[10px] text-gray-600 mt-1">This month: <span class="text-orange-500 mono" id="kpi-maxed-month">0</span> total hits</div>
+      <!-- subtle warning stripe -->
+      <div class="absolute top-0 right-0 w-1 h-full bg-orange-500/20 rounded-r-xl"></div>
+    </div>
+
+    <div class="card p-4 relative overflow-hidden">
+      <div class="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Highest Single User</div>
+      <div class="mono text-3xl font-bold text-purple-400" id="kpi-top-spend">$0</div>
+      <div class="text-gray-300 text-xs mt-2 font-medium" id="kpi-top-name">—</div>
+      <div class="text-[10px] text-gray-600 mt-1" id="kpi-top-dept">—</div>
+      <div class="absolute top-0 right-0 w-1 h-full bg-purple-500/20 rounded-r-xl"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Main Grid ── -->
+  <div class="grid grid-cols-12 gap-4 mb-4">
+
+    <!-- Leaderboard (4 cols) -->
+    <div class="col-span-4 card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-200">Token Leaderboard</h2>
+        <span class="text-[10px] text-gray-600">monthly spend</span>
+      </div>
+      <div id="leaderboard" class="space-y-2.5"></div>
+    </div>
+
+    <!-- Live Feed (4 cols) -->
+    <div class="col-span-4 card p-4 flex flex-col">
+      <div class="flex items-center gap-2 mb-3">
+        <h2 class="text-sm font-semibold text-gray-200">Live Activity</h2>
+        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse"></div>
+      </div>
+      <div id="live-feed" class="overflow-y-auto flex-1 space-y-1" style="max-height:320px;"></div>
+    </div>
+
+    <!-- Right panel (4 cols) -->
+    <div class="col-span-4 flex flex-col gap-4">
+
+      <!-- Quota alerts -->
+      <div class="card p-4 flex-shrink-0">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-red-400">Quota Alerts</h2>
+          <span class="text-[10px] text-gray-600">5-hr window</span>
+        </div>
+        <div id="alerts-list" class="space-y-1.5 overflow-y-auto" style="max-height:130px;"></div>
+      </div>
+
+      <!-- Window utilization heatmap row -->
+      <div class="card p-4 flex-shrink-0">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-200">Window Saturation</h2>
+          <span class="text-[10px] text-gray-600">current 5-hr window</span>
+        </div>
+        <div id="saturation-grid" class="grid grid-cols-10 gap-1"></div>
+        <div class="flex items-center gap-3 mt-3 text-[10px] text-gray-600">
+          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-700"></span> Low</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-orange-500"></span> High</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-500"></span> Maxed</span>
+        </div>
+      </div>
+
+      <!-- Dept breakdown -->
+      <div class="card p-4 flex-1">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-200">Spend by Dept</h2>
+          <span class="text-[10px] text-gray-600">this month</span>
+        </div>
+        <div id="dept-bars" class="space-y-2"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Trend Chart ── -->
+  <div class="card p-4 mb-4">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-gray-200">30-Day Token Consumption & Spend</h2>
+      <div class="flex items-center gap-4 text-[11px] text-gray-500">
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-cyan-400 rounded"></span> Tokens</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-purple-400 rounded"></span> Spend ($)</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 bg-red-500 rounded border-dashed" style="border-top:2px dashed #ef4444;height:0"></span> Budget limit</span>
+      </div>
+    </div>
+    <canvas id="trend-chart" height="90"></canvas>
+  </div>
+
+  <!-- ── Bottom: Token-maxing breakdown ── -->
+  <div class="grid grid-cols-3 gap-4">
+
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-gray-200 mb-1">Frequent Maxers</h2>
+      <p class="text-[10px] text-gray-600 mb-3">Employees who hit quota most often this month</p>
+      <div id="frequent-maxers" class="space-y-2"></div>
+    </div>
+
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-gray-200 mb-1">Plan Distribution</h2>
+      <p class="text-[10px] text-gray-600 mb-3">Headcount & spend by Claude subscription tier</p>
+      <div id="plan-dist" class="space-y-3"></div>
+    </div>
+
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-gray-200 mb-1">Context on Token Maxing</h2>
+      <p class="text-[10px] text-gray-600 mb-3">What's happening industry-wide in June 2026</p>
+      <div class="space-y-3 text-[11px] text-gray-400 leading-relaxed">
+        <div class="flex gap-2">
+          <span class="text-orange-400 shrink-0 mt-0.5">▲</span>
+          <span>Anthropic's Claude Max users report hitting their 5-hr window in as little as <strong class="text-gray-200">19 minutes</strong> due to agentic workloads.</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="text-red-400 shrink-0 mt-0.5">▲</span>
+          <span>Uber burned through its entire 2026 AI budget by <strong class="text-gray-200">April</strong>. Per-engineer Claude Code bills: $500–$2,000/mo.</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="text-purple-400 shrink-0 mt-0.5">▲</span>
+          <span>"Tokenmaxxing" culture — treating high AI token burn as a productivity proxy — is facing a <strong class="text-gray-200">CFO reckoning</strong>.</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="text-cyan-400 shrink-0 mt-0.5">▲</span>
+          <span>Anthropic is compute-constrained. Tighter limits are expected through end of 2026 as infra investment takes <strong class="text-gray-200">12–24 months</strong> to scale.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+function rnd(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function pick(arr) { return arr[rnd(0, arr.length - 1)]; }
+function fmtTokens(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+  return n.toString();
+}
+function fmtMoney(n) { return '$' + Math.round(n).toLocaleString(); }
+
+// ─────────────────────────────────────────────
+// EMPLOYEE DATA
+// ─────────────────────────────────────────────
+const DEPTS = {
+  Engineering: { n: 30, color: '#22d3ee', avgSpend: 1640 },
+  Product:     { n: 15, color: '#a78bfa', avgSpend: 510  },
+  Marketing:   { n: 20, color: '#fb923c', avgSpend: 275  },
+  Sales:       { n: 15, color: '#34d399', avgSpend: 145  },
+  Operations:  { n: 10, color: '#60a5fa', avgSpend: 88   },
+  Finance:     { n:  5, color: '#fbbf24', avgSpend: 58   },
+  HR:          { n:  5, color: '#f472b6', avgSpend: 34   },
+};
+
+const FIRST = ['Alex','Jordan','Sam','Casey','Morgan','Taylor','Riley','Avery','Quinn','Skyler','Reese','Blake','Kendall','Jamie','Drew','Peyton','Charlie','Finley','Rowan','Emery','Luca','Noah','Zara','Mia','Leo','Eli','Aria','Ivy','Owen','Nora','Diego','Piper','Sage','Cole','Hazel','Jude','Wren','Archer','Quinn','Remy'];
+const LAST  = ['Chen','Park','Williams','Rivera','Patel','Kim','Johnson','Thompson','Garcia','Martinez','Lee','Brown','Davis','Wilson','Moore','Taylor','Anderson','Jackson','White','Harris','Martin','Lewis','Robinson','Walker','Hall','Allen','Young','King','Wright','Scott','Nguyen','Okafor','Yamamoto','Kowalski','Mendoza','Fischer','Reyes','Clark'];
+
+const employees = [];
+for (const [dept, info] of Object.entries(DEPTS)) {
+  for (let i = 0; i < info.n; i++) {
+    const v = 0.35 + Math.random() * 1.3;
+    const spend = Math.round(info.avgSpend * v);
+    const tier = spend > 1200 ? 'Max20' : spend > 450 ? 'Max5' : 'Pro';
+    const winMax = tier === 'Max20' ? 220000 : tier === 'Max5' ? 88000 : 44000;
+    employees.push({
+      name: `${pick(FIRST)} ${pick(LAST)}`,
+      dept,
+      tier,
+      monthlySpend: spend,
+      tokensMonth: Math.round(spend * rnd(290, 360)),
+      timesMaxedMonth: Math.max(0, Math.round((spend / 80) * (Math.random() * 1.8))),
+      isMaxedNow: false,
+      windowMax: winMax,
+      windowUsed: Math.round(winMax * Math.random()),
+    });
+  }
+}
+
+// Sorted leaderboard
+const board = [...employees].sort((a,b) => b.monthlySpend - a.monthlySpend);
+
+// Mark some as currently maxed (heavier users more likely)
+board.slice(0, 30).forEach(e => { if (Math.random() < .18) e.isMaxedNow = true; });
+
+let totalSpend  = employees.reduce((s,e) => s+e.monthlySpend, 0);
+let totalTokens = employees.reduce((s,e) => s+e.tokensMonth, 0);
+let maxedToday  = employees.filter(e => e.isMaxedNow).length;
+const maxedTotalMonth = employees.reduce((s,e) => s+e.timesMaxedMonth, 0);
+const topUser   = board[0];
+const projected = Math.round(totalSpend * (30/17)); // 17 days in so far
+
+// ─────────────────────────────────────────────
+// KPI CARDS
+// ─────────────────────────────────────────────
+function setKpis() {
+  document.getElementById('kpi-spend').textContent    = fmtMoney(totalSpend);
+  document.getElementById('kpi-projected').textContent = fmtMoney(projected);
+  document.getElementById('kpi-tokens').textContent   = fmtTokens(totalTokens);
+  document.getElementById('kpi-avg-tok').textContent  = fmtTokens(Math.round(totalTokens/100));
+  document.getElementById('kpi-maxed').textContent    = maxedToday;
+  document.getElementById('kpi-maxed-month').textContent = maxedTotalMonth;
+  document.getElementById('kpi-top-spend').textContent = fmtMoney(topUser.monthlySpend);
+  document.getElementById('kpi-top-name').textContent  = topUser.name;
+  document.getElementById('kpi-top-dept').textContent  = topUser.dept + ' · ' + topUser.tier + ' · ' + fmtTokens(topUser.tokensMonth) + ' tokens';
+}
+setKpis();
+
+// Clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
+}, 1000);
+
+// ─────────────────────────────────────────────
+// LEADERBOARD
+// ─────────────────────────────────────────────
+function renderBoard() {
+  const el = document.getElementById('leaderboard');
+  el.innerHTML = board.slice(0, 12).map((e, i) => {
+    const pct = Math.round(e.monthlySpend / board[0].monthlySpend * 100);
+    const dcolor = DEPTS[e.dept]?.color || '#9ca3af';
+    const maxedBadge = e.isMaxedNow
+      ? '<span class="text-[9px] text-red-400 font-bold mono ml-1">MAXED</span>'
+      : '';
+    const tierClass = e.tier === 'Max20' ? 'tier-max20' : e.tier === 'Max5' ? 'tier-max5' : 'tier-pro';
+    return `
+      <div class="flex items-center gap-2">
+        <span class="mono text-[10px] text-gray-700 w-4 text-right">${i+1}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-1">
+            <span class="text-[11px] text-gray-300 truncate">${e.name}${maxedBadge}</span>
+            <span class="mono text-xs font-semibold ${i===0?'text-yellow-400':i<3?'text-gray-200':'text-gray-400'} shrink-0">${fmtMoney(e.monthlySpend)}</span>
+          </div>
+          <div class="flex items-center gap-2 mt-0.5">
+            <div class="flex-1 bg-gray-800 rounded-full h-1">
+              <div class="h-1 rounded-full bar-fill" style="width:${pct}%; background:linear-gradient(90deg,${dcolor}80,${dcolor})"></div>
+            </div>
+            <span class="tier-badge ${tierClass}">${e.tier}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+renderBoard();
+
+// ─────────────────────────────────────────────
+// LIVE FEED
+// ─────────────────────────────────────────────
+const ACTIONS = [
+  e => `ran agentic refactor · ${rnd(8,45)}K tokens`,
+  e => `sent ${rnd(800,6000).toLocaleString()}-token code review`,
+  e => `generated test suite · ${rnd(4,22)}K tokens`,
+  e => `completed RAG query · ${rnd(2,8)}K tokens`,
+  e => `debugged CI pipeline · ${rnd(5,30)}K tokens burned`,
+  e => `drafted copy variants · ${rnd(1,4)}K tokens`,
+  e => `analyzed quarterly data · ${rnd(6,28)}K tokens`,
+  e => `summarized doc dump · ${rnd(3,12)}K tokens`,
+  e => `rewrote component · ${rnd(10,55)}K tokens`,
+  e => `ran multi-step agent task · ${rnd(15,80)}K tokens`,
+];
+
+const feedEl = document.getElementById('live-feed');
+
+function addFeed() {
+  const e = pick(employees);
+  const action = pick(ACTIONS)(e);
+  const dcolor = DEPTS[e.dept]?.color || '#9ca3af';
+  const t = new Date().toLocaleTimeString('en-US',{hour12:false});
+  const el = document.createElement('div');
+  el.className = 'slide-in flex items-start gap-2 py-1 border-b border-gray-900';
+  el.innerHTML = `
+    <span class="mono text-[9px] text-gray-700 shrink-0 mt-0.5">${t}</span>
+    <div class="min-w-0">
+      <span class="text-[11px] text-gray-300 font-medium">${e.name}</span>
+      <span class="text-[11px] text-gray-500"> ${action}</span>
+      <span class="text-[9px] font-semibold ml-1" style="color:${dcolor}">${e.dept}</span>
+    </div>`;
+  feedEl.prepend(el);
+  if (feedEl.children.length > 50) feedEl.removeChild(feedEl.lastChild);
+}
+for (let i=0;i<14;i++) addFeed();
+setInterval(addFeed, 1100);
+
+// ─────────────────────────────────────────────
+// QUOTA ALERTS
+// ─────────────────────────────────────────────
+function renderAlerts() {
+  const maxed = employees.filter(e => e.isMaxedNow).slice(0, 7);
+  const el = document.getElementById('alerts-list');
+  if (maxed.length === 0) {
+    el.innerHTML = '<div class="text-[11px] text-gray-700 italic">No active quota blocks</div>';
+    return;
+  }
+  el.innerHTML = maxed.map(e => `
+    <div class="flash-alert flex items-center justify-between rounded-lg px-2.5 py-1.5 border border-red-900/50" style="background:rgba(127,29,29,.15)">
+      <div>
+        <div class="text-xs text-red-200 font-medium">${e.name}</div>
+        <div class="text-[10px] text-red-600">${e.tier} · ${e.dept} · window full</div>
+      </div>
+      <span class="mono text-[9px] text-red-400 font-bold shrink-0">BLOCKED</span>
+    </div>`).join('');
+}
+renderAlerts();
+
+// Simulate quota events
+setInterval(() => {
+  // Randomly max out a heavy user
+  const candidates = board.slice(0, 35).filter(e => !e.isMaxedNow);
+  if (candidates.length && Math.random() < .4) {
+    const e = pick(candidates);
+    e.isMaxedNow = true;
+    maxedToday++;
+    document.getElementById('kpi-maxed').textContent = maxedToday;
+    renderAlerts();
+    renderBoard();
+    // Unmax after simulated window reset (30s demo = 5hr real)
+    setTimeout(() => { e.isMaxedNow = false; renderAlerts(); renderBoard(); }, rnd(20000,45000));
+  }
+}, 9000);
+
+// ─────────────────────────────────────────────
+// SATURATION GRID (100 employee heatmap)
+// ─────────────────────────────────────────────
+function renderSaturation() {
+  const grid = document.getElementById('saturation-grid');
+  grid.innerHTML = employees.map(e => {
+    const pct = e.windowUsed / e.windowMax;
+    let bg;
+    if (e.isMaxedNow)  bg = '#ef4444';
+    else if (pct > .8) bg = '#f97316';
+    else if (pct > .5) bg = '#eab308';
+    else               bg = `rgba(16,185,129,${.3 + pct*.5})`;
+    return `<div title="${e.name} · ${Math.round(pct*100)}% used" style="background:${bg};border-radius:3px;height:16px;cursor:default"></div>`;
+  }).join('');
+}
+renderSaturation();
+setInterval(() => {
+  employees.forEach(e => {
+    if (!e.isMaxedNow) e.windowUsed = Math.min(e.windowMax, e.windowUsed + rnd(0, 800));
+    if (e.windowUsed >= e.windowMax && !e.isMaxedNow) e.isMaxedNow = true;
+  });
+  renderSaturation();
+}, 3000);
+
+// ─────────────────────────────────────────────
+// DEPT BARS
+// ─────────────────────────────────────────────
+const deptSpend = {};
+const deptTokens = {};
+for (const e of employees) {
+  deptSpend[e.dept]  = (deptSpend[e.dept]  || 0) + e.monthlySpend;
+  deptTokens[e.dept] = (deptTokens[e.dept] || 0) + e.tokensMonth;
+}
+const maxDS = Math.max(...Object.values(deptSpend));
+
+document.getElementById('dept-bars').innerHTML = Object.entries(deptSpend)
+  .sort((a,b)=>b[1]-a[1])
+  .map(([dept, spend]) => {
+    const pct = Math.round(spend/maxDS*100);
+    const color = DEPTS[dept]?.color || '#9ca3af';
+    return `
+      <div>
+        <div class="flex justify-between text-[11px] mb-0.5">
+          <span class="text-gray-400">${dept}</span>
+          <span class="mono text-gray-300">${fmtMoney(spend)}</span>
+        </div>
+        <div class="bg-gray-800 rounded-full h-1.5">
+          <div class="h-1.5 rounded-full bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+// ─────────────────────────────────────────────
+// TREND CHART
+// ─────────────────────────────────────────────
+const labels = [], tokenSeries = [], spendSeries = [];
+const now = new Date();
+
+for (let i = 29; i >= 0; i--) {
+  const d = new Date(now); d.setDate(d.getDate() - i);
+  labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+  const prog = (30-i)/30;
+  const noise = .8 + Math.random()*.4;
+  const dayTokens = Math.round((totalTokens/17) * prog * noise);
+  const daySpend  = Math.round((totalSpend/17)  * prog * noise);
+  tokenSeries.push(i >= 13 ? null : dayTokens);  // only 17 days of data
+  spendSeries.push(i >= 13 ? null : daySpend);
+}
+
+const chart = new Chart(document.getElementById('trend-chart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Tokens',
+        data: tokenSeries,
+        borderColor: '#22d3ee',
+        backgroundColor: 'rgba(34,211,238,.06)',
+        borderWidth: 2, tension: .4, pointRadius: 0,
+        yAxisID: 'yT', fill: true, spanGaps: false,
+      },
+      {
+        label: 'Spend ($)',
+        data: spendSeries,
+        borderColor: '#a78bfa',
+        backgroundColor: 'rgba(167,139,250,.06)',
+        borderWidth: 2, tension: .4, pointRadius: 0,
+        yAxisID: 'yS', fill: true, spanGaps: false,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1,
+        titleColor: '#f1f5f9', bodyColor: '#94a3b8',
+        callbacks: {
+          label: ctx => ctx.datasetIndex === 0
+            ? ` ${fmtTokens(ctx.raw)} tokens`
+            : ` ${fmtMoney(ctx.raw)}`,
+        }
+      },
+      annotation: {
+        annotations: {
+          budgetLine: {
+            type: 'line', yMin: totalSpend, yMax: totalSpend, yScaleID: 'yS',
+            borderColor: 'rgba(239,68,68,.5)', borderWidth: 1, borderDash: [4,4],
+          }
+        }
+      }
+    },
+    scales: {
+      x:  { ticks:{color:'#4b5563',font:{size:10},maxTicksLimit:8}, grid:{color:'#111827'} },
+      yT: { position:'left',  ticks:{color:'#22d3ee',font:{size:10},callback:v=>fmtTokens(v)}, grid:{color:'#111827'} },
+      yS: { position:'right', ticks:{color:'#a78bfa',font:{size:10},callback:v=>'$'+v.toLocaleString()}, grid:{drawOnChartArea:false} },
+    }
+  }
+});
+
+// Live token counter ticking up chart
+setInterval(() => {
+  const inc = rnd(18000, 72000);
+  totalTokens += inc;
+  const lastIdx = tokenSeries.length - 1;
+  tokenSeries[lastIdx] = (tokenSeries[lastIdx] || 0) + inc;
+  spendSeries[lastIdx] = (spendSeries[lastIdx] || 0) + Math.round(inc/320);
+  document.getElementById('kpi-tokens').textContent = fmtTokens(totalTokens);
+  document.getElementById('kpi-avg-tok').textContent = fmtTokens(Math.round(totalTokens/100));
+  document.getElementById('kpi-tps').textContent = fmtTokens(inc) + '/s';
+  chart.update('none');
+}, 1000);
+
+// ─────────────────────────────────────────────
+// FREQUENT MAXERS
+// ─────────────────────────────────────────────
+const freqMaxers = [...employees].sort((a,b)=>b.timesMaxedMonth - a.timesMaxedMonth).slice(0,6);
+document.getElementById('frequent-maxers').innerHTML = freqMaxers.map((e,i) => {
+  const pct = Math.round(e.timesMaxedMonth/freqMaxers[0].timesMaxedMonth*100);
+  return `
+    <div class="flex items-center gap-2">
+      <span class="mono text-[10px] text-gray-700 w-4">${i+1}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex justify-between text-[11px]">
+          <span class="text-gray-300 truncate">${e.name}</span>
+          <span class="mono text-orange-400">${e.timesMaxedMonth}×</span>
+        </div>
+        <div class="bg-gray-800 rounded-full h-1 mt-0.5">
+          <div class="h-1 rounded-full bg-orange-500 bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="text-[9px] text-gray-600 mt-0.5">${e.dept} · ${e.tier}</div>
+      </div>
+    </div>`;
+}).join('');
+
+// ─────────────────────────────────────────────
+// PLAN DISTRIBUTION
+// ─────────────────────────────────────────────
+const tierGroups = {
+  Max20: { n:0, spend:0, color:'#c084fc' },
+  Max5:  { n:0, spend:0, color:'#60a5fa' },
+  Pro:   { n:0, spend:0, color:'#4b5563' },
+};
+employees.forEach(e => { tierGroups[e.tier].n++; tierGroups[e.tier].spend += e.monthlySpend; });
+const tierCost = { Max20: 200, Max5: 100, Pro: 20 }; // monthly sub cost
+
+document.getElementById('plan-dist').innerHTML = ['Max20','Max5','Pro'].map(tier => {
+  const g = tierGroups[tier];
+  const subCost = tierCost[tier] * g.n;
+  return `
+    <div class="rounded-lg px-3 py-2.5 border border-gray-800" style="background:rgba(255,255,255,.02)">
+      <div class="flex items-center justify-between mb-1">
+        <span class="tier-badge ${tier==='Max20'?'tier-max20':tier==='Max5'?'tier-max5':'tier-pro'}">${tier}</span>
+        <span class="mono text-xs font-semibold text-gray-200">${fmtMoney(g.spend)}/mo</span>
+      </div>
+      <div class="text-[10px] text-gray-500">${g.n} employees · ${fmtMoney(subCost)} in subscriptions</div>
+      <div class="text-[10px] text-gray-600">Avg ${fmtMoney(Math.round(g.spend/g.n))}/person · ${g.n>0?fmtTokens(Math.round(tierGroups[tier].spend*310/g.n)):0} tokens avg</div>
+    </div>`;
+}).join('');
+</script>
+</body>
+</html>
