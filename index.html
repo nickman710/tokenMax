@@ -80,6 +80,33 @@
     </div>
   </header>
 
+  <!-- ── Live Spend Odometer ── -->
+  <div class="card mb-5 p-4 sm:p-5 relative overflow-hidden" style="border-color:rgba(249,115,22,.25)">
+    <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(ellipse at 8% 50%,rgba(249,115,22,.06),transparent 55%)"></div>
+    <div class="flex flex-col sm:flex-row sm:items-center gap-4 relative">
+      <div class="flex-1">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-1.5 h-1.5 rounded-full bg-orange-400 pulse"></div>
+          <span class="text-[10px] text-gray-500 uppercase tracking-widest">Total AI spend since adoption</span>
+          <span class="text-[10px] text-gray-700">· Jan 1, 2025</span>
+        </div>
+        <div class="mono text-4xl sm:text-5xl font-bold text-white tracking-tight tabular-nums" id="odometer">$0.00</div>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-gray-500">
+          <span class="text-orange-400 mono font-medium">+$0.10/sec</span>
+          <span class="text-gray-700">·</span>
+          <span><span id="odometer-days" class="text-gray-300 mono">0</span> days of AI operation</span>
+          <span class="text-gray-700">·</span>
+          <span>~$259K/month total cost</span>
+        </div>
+      </div>
+      <div class="shrink-0 sm:text-right sm:border-l sm:border-gray-800 sm:pl-5">
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Annual budget</div>
+        <div class="mono text-xl font-bold text-gray-400">$3,000,000</div>
+        <div class="mono text-[11px] text-red-400 mt-1 font-medium" id="odometer-overage">—</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── KPI Row ── -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
 
@@ -383,6 +410,37 @@ setKpis();
 setInterval(() => {
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
 }, 1000);
+
+// ─────────────────────────────────────────────
+// LIVE SPEND ODOMETER — epoch-seeded, monotonic
+// Every viewer sees the same number at the same moment.
+// $0.10/sec = ~$259K/month total AI cost (subs + API + tooling).
+// Cents tick every 100ms, dollars every ~10 seconds.
+// ─────────────────────────────────────────────
+const ADOPT_MS    = 1735689600000; // 2025-01-01 00:00:00 UTC
+const RATE_PER_MS = 0.10 / 1000;  // $0.10 per second
+const ANNUAL_BUDGET = 3_000_000;
+
+const odometerEl  = document.getElementById('odometer');
+const odoMeterDays = document.getElementById('odometer-days');
+const odoOverage  = document.getElementById('odometer-overage');
+
+function updateOdometer() {
+  const elapsed = Date.now() - ADOPT_MS;
+  const total   = elapsed * RATE_PER_MS;
+  const whole   = Math.floor(total);
+  const cents   = Math.floor((total - whole) * 100);
+  odometerEl.textContent  = '$' + whole.toLocaleString() + '.' + String(cents).padStart(2, '0');
+  odoMeterDays.textContent = Math.floor(elapsed / 86400000);
+  const years = elapsed / (365.25 * 86400000);
+  const pace  = Math.round(total / years);
+  const over  = Math.round((pace / ANNUAL_BUDGET - 1) * 100);
+  odoOverage.textContent = over > 0
+    ? `⚠ ${over}% over annual budget pace`
+    : 'Within annual budget';
+}
+updateOdometer();
+setInterval(updateOdometer, 100);
 
 // Page-view token ticker — starts at a plausible page-load cost, ticks up as you watch
 let pageTokens = rnd(1800, 3200);
