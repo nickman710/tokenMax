@@ -187,6 +187,70 @@
     <canvas id="trend-chart" height="120"></canvas>
   </div>
 
+  <!-- ── Cost Paradox & Backlog ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+
+    <!-- Cost Comparison -->
+    <div class="card p-4">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-200">The AI Cost Paradox</h2>
+          <p class="text-[11px] text-gray-500 mt-0.5">AI was supposed to cut costs. You're now paying for both.</p>
+        </div>
+        <div class="flex flex-wrap gap-3 text-[10px] shrink-0">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-dashed border-emerald-400"></span><span class="text-gray-400">Projected</span></span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-blue-400"></span><span class="text-gray-400">Last Year</span></span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-orange-400"></span><span class="text-gray-400">Current</span></span>
+        </div>
+      </div>
+      <div class="flex gap-4 mb-3">
+        <div class="text-center">
+          <div class="text-[10px] text-gray-600 uppercase tracking-wider">Monthly Overrun</div>
+          <div class="mono text-lg font-bold text-red-400" id="cost-overrun">—</div>
+        </div>
+        <div class="text-center">
+          <div class="text-[10px] text-gray-600 uppercase tracking-wider">vs Projection</div>
+          <div class="mono text-lg font-bold text-orange-400" id="cost-vs-projection">—</div>
+        </div>
+        <div class="text-center">
+          <div class="text-[10px] text-gray-600 uppercase tracking-wider">AI Overhead</div>
+          <div class="mono text-lg font-bold text-purple-400" id="ai-overhead">—</div>
+        </div>
+      </div>
+      <canvas id="cost-chart" height="160"></canvas>
+    </div>
+
+    <!-- Backlog vs Headcount -->
+    <div class="card p-4">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-200">Productivity Debt</h2>
+          <p class="text-[11px] text-gray-500 mt-0.5">Headcount cut to fund AI. The backlog didn't get the memo.</p>
+        </div>
+        <div class="flex flex-wrap gap-3 text-[10px] shrink-0">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-purple-400"></span><span class="text-gray-400">Headcount</span></span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 border-t-2 border-red-400"></span><span class="text-gray-400">Backlog (tickets)</span></span>
+        </div>
+      </div>
+      <div class="flex gap-4 mb-3">
+        <div class="text-center">
+          <div class="text-[10px] text-gray-600 uppercase tracking-wider">Headcount Lost</div>
+          <div class="mono text-lg font-bold text-purple-400" id="hc-lost">—</div>
+        </div>
+        <div class="text-center">
+          <div class="text-[10px] text-gray-600 uppercase tracking-wider">Backlog Growth</div>
+          <div class="mono text-lg font-bold text-red-400" id="backlog-growth">—</div>
+        </div>
+        <div class="text-center">
+          <div class="text-[10px] text-gray-600 uppercase tracking-wider">Tickets / Person</div>
+          <div class="mono text-lg font-bold text-orange-400" id="tickets-per-head">—</div>
+        </div>
+      </div>
+      <canvas id="backlog-chart" height="160"></canvas>
+    </div>
+
+  </div>
+
   <!-- ── Bottom: Token-maxing breakdown ── -->
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -554,6 +618,187 @@ setInterval(() => {
   document.getElementById('kpi-tps').textContent = fmtTokens(inc) + '/s';
   chart.update('none');
 }, 1000);
+
+// ─────────────────────────────────────────────
+// COST PARADOX CHART
+// ─────────────────────────────────────────────
+// Story: AI was projected to replace headcount, cutting monthly costs 25-30%.
+// Reality: headcount stayed flat (nobody got laid off), so current = last year's
+// people costs + the new AI subscription layer on top.
+const costLabels = [];
+const aiProjected = [];  // the promise: costs falling as AI absorbs work
+const lastYearLine = []; // baseline before AI: slow inflation only
+const currentLine = [];  // reality: last year + AI subscriptions still growing
+
+const baseCost = 455000; // baseline monthly dept operational cost
+
+for (let i = 11; i >= 0; i--) {
+  const d = new Date(now); d.setMonth(d.getMonth() - i);
+  costLabels.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }));
+  const mo = (12 - i) / 12; // 0→1 over the year
+  const j = () => 0.96 + Math.random() * 0.08;
+
+  // Projection deck said: AI absorbs work → reduce headcount → save 28% by month 12
+  aiProjected.push(Math.round(baseCost * (1 - mo * 0.28) * j()));
+
+  // Last year: ~5% annual inflation, no AI overhead
+  const ly = Math.round(baseCost * (0.91 + mo * 0.1) * j());
+  lastYearLine.push(ly);
+
+  // Current: same people costs as last year (no layoffs) PLUS AI subscriptions
+  // AI subscriptions tripled over the year as adoption spread
+  const aiSubs = Math.round(28000 * (1 + mo * 2.6));
+  currentLine.push(ly + aiSubs);
+}
+
+// Summary stats for the callout row
+const lastProjected = aiProjected[11];
+const lastCurrent   = currentLine[11];
+const lastLastYear  = lastYearLine[11];
+const aiSubsNow     = lastCurrent - lastLastYear;
+document.getElementById('cost-overrun').textContent    = '+$' + ((lastCurrent - lastLastYear) / 1000).toFixed(0) + 'K/mo';
+document.getElementById('cost-vs-projection').textContent = '+$' + ((lastCurrent - lastProjected) / 1000).toFixed(0) + 'K/mo';
+document.getElementById('ai-overhead').textContent     = '$' + (aiSubsNow / 1000).toFixed(0) + 'K/mo';
+
+new Chart(document.getElementById('cost-chart'), {
+  type: 'line',
+  data: {
+    labels: costLabels,
+    datasets: [
+      {
+        label: 'AI Projected',
+        data: aiProjected,
+        borderColor: '#34d399',
+        borderDash: [6, 4],
+        borderWidth: 2,
+        backgroundColor: 'transparent',
+        tension: .4, pointRadius: 0,
+      },
+      {
+        label: 'Last Year',
+        data: lastYearLine,
+        borderColor: '#60a5fa',
+        borderWidth: 2,
+        backgroundColor: 'transparent',
+        tension: .4, pointRadius: 0,
+      },
+      {
+        label: 'Current',
+        data: currentLine,
+        borderColor: '#f97316',
+        borderWidth: 2.5,
+        backgroundColor: 'rgba(249,115,22,.07)',
+        fill: true,
+        tension: .4, pointRadius: 0,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1,
+        titleColor: '#f1f5f9', bodyColor: '#94a3b8',
+        callbacks: { label: ctx => ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString()}` }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#4b5563', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: '#111827' } },
+      y: { ticks: { color: '#9ca3af', font: { size: 10 }, callback: v => '$' + (v/1000).toFixed(0) + 'K' }, grid: { color: '#111827' } }
+    }
+  }
+});
+
+// ─────────────────────────────────────────────
+// BACKLOG VS HEADCOUNT CHART
+// ─────────────────────────────────────────────
+// Story: three waves of layoffs justified by "AI maturity."
+// Each cut causes a backlog spike. AI doesn't absorb the work.
+// Net result: ~30% fewer people, ~3× more open tickets.
+const backlogLabels = [];
+const backlogData   = [];
+const headcountData = [];
+
+let hc = 142; // starting headcount (before AI-justified cuts)
+let bl = 295; // starting backlog (manageable)
+
+const cuts = [
+  { mo: 2,  n: 14, blSpike: 90  },  // "AI can handle routine tickets"
+  { mo: 6,  n: 20, blSpike: 155 },  // "We're over-indexed on headcount"
+  { mo: 10, n: 8,  blSpike: 100 },  // partial — board pushback slowed this one
+];
+
+for (let i = 11; i >= 0; i--) {
+  const d = new Date(now); d.setMonth(d.getMonth() - i);
+  backlogLabels.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }));
+  const mo = 12 - i; // 1→12
+  const j = () => 0.97 + Math.random() * 0.06;
+
+  cuts.forEach(c => { if (mo === c.mo) { hc -= c.n; bl += c.blSpike; } });
+  bl += rnd(14, 30); // organic monthly accumulation — tickets pile up regardless
+
+  headcountData.push(Math.round(hc * j()));
+  backlogData.push(Math.round(bl * j()));
+}
+
+const hcStart = headcountData[0];
+const hcEnd   = headcountData[11];
+const blStart = backlogData[0];
+const blEnd   = backlogData[11];
+
+document.getElementById('hc-lost').textContent       = '−' + (hcStart - hcEnd) + ' people';
+document.getElementById('backlog-growth').textContent = '+' + Math.round((blEnd - blStart) / blStart * 100) + '%';
+document.getElementById('tickets-per-head').textContent = (blEnd / hcEnd).toFixed(1) + 'x';
+
+new Chart(document.getElementById('backlog-chart'), {
+  type: 'line',
+  data: {
+    labels: backlogLabels,
+    datasets: [
+      {
+        label: 'Headcount',
+        data: headcountData,
+        borderColor: '#a78bfa',
+        backgroundColor: 'rgba(167,139,250,.06)',
+        borderWidth: 2, tension: .3, pointRadius: 2.5,
+        pointBackgroundColor: '#a78bfa', fill: true,
+        yAxisID: 'yH',
+      },
+      {
+        label: 'Open Backlog',
+        data: backlogData,
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239,68,68,.08)',
+        borderWidth: 2.5, tension: .3, pointRadius: 2.5,
+        pointBackgroundColor: '#ef4444', fill: true,
+        yAxisID: 'yB',
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1,
+        titleColor: '#f1f5f9', bodyColor: '#94a3b8',
+        callbacks: {
+          label: ctx => ctx.datasetIndex === 0
+            ? ` Headcount: ${ctx.raw} people`
+            : ` Backlog: ${ctx.raw} tickets`
+        }
+      }
+    },
+    scales: {
+      x:  { ticks: { color: '#4b5563', font: { size: 10 } }, grid: { color: '#111827' } },
+      yH: { position: 'left',  ticks: { color: '#a78bfa', font: { size: 10 } }, grid: { color: '#111827' } },
+      yB: { position: 'right', ticks: { color: '#ef4444', font: { size: 10 } }, grid: { drawOnChartArea: false } },
+    }
+  }
+});
 
 // ─────────────────────────────────────────────
 // FREQUENT MAXERS
