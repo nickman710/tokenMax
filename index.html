@@ -64,7 +64,15 @@
           <div id="budget-bar" class="h-1 rounded-full bg-gradient-to-r from-orange-500 to-red-500 bar-fill" style="width:74%"></div>
         </div>
       </div>
-      <div class="flex items-center gap-2 sm:pl-5 sm:border-l sm:border-gray-800">
+      <!-- Page-view token ticker -->
+      <div class="flex flex-col items-end pl-3 sm:pl-5 border-l border-gray-800">
+        <div class="text-[9px] text-gray-600 uppercase tracking-widest">tokens to view this page</div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <div class="w-1.5 h-1.5 rounded-full bg-yellow-400 pulse"></div>
+          <span class="mono text-sm font-bold text-yellow-400 tabular-nums" id="page-tokens">0</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 pl-3 sm:pl-5 border-l border-gray-800">
         <div class="w-2 h-2 rounded-full bg-emerald-400 pulse"></div>
         <span class="text-xs text-emerald-400 mono font-bold">LIVE</span>
       </div>
@@ -375,6 +383,21 @@ setKpis();
 setInterval(() => {
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
 }, 1000);
+
+// Page-view token ticker — starts at a plausible page-load cost, ticks up as you watch
+let pageTokens = rnd(1800, 3200);
+const pageTokensEl = document.getElementById('page-tokens');
+function renderPageTokens() {
+  pageTokensEl.textContent = pageTokens.toLocaleString();
+  // brief brightness flash on each tick
+  pageTokensEl.style.opacity = '0.5';
+  requestAnimationFrame(() => { pageTokensEl.style.opacity = '1'; });
+}
+renderPageTokens();
+setInterval(() => {
+  pageTokens += rnd(28, 72);
+  renderPageTokens();
+}, 1200);
 
 // ─────────────────────────────────────────────
 // LEADERBOARD
