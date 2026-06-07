@@ -92,16 +92,16 @@
         </div>
         <div class="mono text-4xl sm:text-5xl font-bold text-white tracking-tight tabular-nums" id="odometer">$0.00</div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-gray-500">
-          <span class="text-orange-400 mono font-medium">+$0.10/sec</span>
+          <span class="text-orange-400 mono font-medium">+$430/sec</span>
           <span class="text-gray-700">·</span>
           <span><span id="odometer-days" class="text-gray-300 mono">0</span> days of AI operation</span>
           <span class="text-gray-700">·</span>
-          <span>~$259K/month total cost</span>
+          <span>~$1.1B/month · 430,000 employees</span>
         </div>
       </div>
       <div class="shrink-0 sm:text-right sm:border-l sm:border-gray-800 sm:pl-5">
         <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Annual budget</div>
-        <div class="mono text-xl font-bold text-gray-400">$3,000,000</div>
+        <div class="mono text-xl font-bold text-gray-400">$10,000,000,000</div>
         <div class="mono text-[11px] text-red-400 mt-1 font-medium" id="odometer-overage">—</div>
       </div>
     </div>
@@ -418,8 +418,8 @@ setInterval(() => {
 // Cents tick every 100ms, dollars every ~10 seconds.
 // ─────────────────────────────────────────────
 const ADOPT_MS    = 1735689600000; // 2025-01-01 00:00:00 UTC
-const RATE_PER_MS = 0.10 / 1000;  // $0.10 per second
-const ANNUAL_BUDGET = 3_000_000;
+const RATE_PER_MS = 430 / 1000;   // $430/sec — 430,000 employees × same per-head rate
+const ANNUAL_BUDGET = 10_000_000_000;
 
 const odometerEl  = document.getElementById('odometer');
 const odoMeterDays = document.getElementById('odometer-days');
@@ -428,9 +428,7 @@ const odoOverage  = document.getElementById('odometer-overage');
 function updateOdometer() {
   const elapsed = Date.now() - ADOPT_MS;
   const total   = elapsed * RATE_PER_MS;
-  const whole   = Math.floor(total);
-  const cents   = Math.floor((total - whole) * 100);
-  odometerEl.textContent  = '$' + whole.toLocaleString() + '.' + String(cents).padStart(2, '0');
+  odometerEl.textContent  = '$' + Math.floor(total).toLocaleString();
   odoMeterDays.textContent = Math.floor(elapsed / 86400000);
   const years = elapsed / (365.25 * 86400000);
   const pace  = Math.round(total / years);
