@@ -35,6 +35,7 @@ Single file: `index.html` — all markup, styles, and logic in one place.
 - Page-view token ticker: every 1.2s — header counter starting at ~1.8K–3.2K, +28–72/tick
 - Quota events: every 9s — randomly maxes out a heavy user (top 35) via the shared `maxOut(e)` helper, which blocks, counts the hit, and auto-unblocks after 20–45s **resetting `windowUsed`** (without the reset the saturation grid turns permanently red)
 - Window saturation grid: every 3s — accrues `windowUsed` proportionally to each tier's cap (`windowMax * 0.02` max per tick) so Pro doesn't fill faster than Max20; full windows route through `maxOut(e)`
+- Incident Mode: first incident ~15-20s after load, then every ~2-3 min — a top-25 spender's agent "gets stuck": fixed banner drops in, the feed floods with red loop-iteration entries (450ms), token velocity KPI spikes red, their heatmap cell strobes. After 25-40s the banner flips to "AGENT TERMINATED BY FINOPS" with wasted-spend tally, which accumulates in the Quota Hits KPI card. The `incident` state var is declared early (before the renderers that check it) — keep it there to avoid TDZ errors
 
 **Charts (Chart.js):**
 - 30-day trend: dual Y axes (tokens left, spend right), only the most recent 17 days populated — matches the `/17` month-to-date projection math

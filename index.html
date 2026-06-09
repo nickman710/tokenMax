@@ -24,6 +24,12 @@
     @keyframes flash-red { 0%,100%{background:rgba(239,68,68,.08)} 50%{background:rgba(239,68,68,.18)} }
     .flash-alert { animation: flash-red 1.6s ease-in-out 3; }
 
+    @keyframes strobe { 0%,100%{background:#ef4444} 50%{background:#7f1d1d} }
+    .strobe { animation: strobe .45s linear infinite; }
+
+    @keyframes banner-pulse { 0%,100%{box-shadow:0 0 24px rgba(239,68,68,.25)} 50%{box-shadow:0 0 42px rgba(239,68,68,.5)} }
+    .banner-alarm { animation: banner-pulse 1.2s ease-in-out infinite; }
+
     ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
@@ -40,6 +46,21 @@
   </style>
 </head>
 <body class="min-h-screen p-3 sm:p-5">
+
+  <!-- ── Incident Banner ── -->
+  <div id="incident-banner" class="fixed top-0 left-0 right-0 z-50 px-3" style="transform:translateY(-120%);transition:transform .45s cubic-bezier(.2,.8,.2,1)">
+    <div id="incident-box" class="banner-alarm mx-auto max-w-3xl mt-3 rounded-xl border px-4 py-3 flex items-center gap-3" style="background:#170b0d;border-color:rgba(239,68,68,.55)">
+      <span id="incident-icon" class="text-xl shrink-0">⚠</span>
+      <div class="flex-1 min-w-0">
+        <div id="incident-title" class="text-sm font-bold text-red-300 tracking-wide">RUNAWAY AGENT DETECTED</div>
+        <div id="incident-detail" class="text-[11px] text-gray-400 mono truncate">—</div>
+      </div>
+      <div class="text-right shrink-0">
+        <div id="incident-burn" class="mono text-lg font-bold text-red-400 tabular-nums">$0</div>
+        <div class="text-[9px] text-gray-500 uppercase tracking-wider">burned this incident</div>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Header ── -->
   <header class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
@@ -133,6 +154,7 @@
       <div class="mono text-3xl font-bold text-orange-400" id="kpi-maxed">0</div>
       <div class="text-gray-600 text-xs mt-2">employees hit their 5-hr limit</div>
       <div class="text-[10px] text-gray-600 mt-1">This month: <span class="text-orange-500 mono" id="kpi-maxed-month">0</span> total hits</div>
+      <div class="text-[10px] text-gray-600 mt-1">Runaway agents: <span class="text-red-400 mono" id="incident-count">0</span> · <span class="text-red-400 mono" id="incident-waste">$0</span> wasted</div>
       <!-- subtle warning stripe -->
       <div class="absolute top-0 right-0 w-1 h-full bg-orange-500/20 rounded-r-xl"></div>
     </div>
@@ -336,6 +358,10 @@ function fmtTokens(n) {
   return n.toString();
 }
 function fmtMoney(n) { return '$' + Math.round(n).toLocaleString(); }
+
+// Active runaway-agent incident, or null — declared early because the
+// saturation renderer and token counter check it on every tick
+let incident = null;
 
 // ─────────────────────────────────────────────
 // EMPLOYEE DATA
@@ -577,7 +603,8 @@ function renderSaturation() {
     else if (pct > .8) bg = '#f97316';
     else if (pct > .5) bg = '#eab308';
     else               bg = `rgba(16,185,129,${.3 + pct*.5})`;
-    return `<div title="${e.name} · ${Math.round(pct*100)}% used" style="background:${bg};border-radius:3px;height:16px;cursor:default"></div>`;
+    const strobe = incident && e === incident.e ? ' class="strobe"' : '';
+    return `<div${strobe} title="${e.name} · ${Math.round(pct*100)}% used" style="background:${bg};border-radius:3px;height:16px;cursor:default"></div>`;
   }).join('');
 }
 renderSaturation();
@@ -688,16 +715,18 @@ const chart = new Chart(document.getElementById('trend-chart'), {
   }
 });
 
-// Live token counter ticking up chart
+// Live token counter ticking up chart — velocity spikes during incidents
+const tpsEl = document.getElementById('kpi-tps');
 setInterval(() => {
-  const inc = rnd(18000, 72000);
+  const inc = rnd(18000, 72000) + (incident ? rnd(120000, 260000) : 0);
   totalTokens += inc;
   const lastIdx = tokenSeries.length - 1;
   tokenSeries[lastIdx] = (tokenSeries[lastIdx] || 0) + inc;
   spendSeries[lastIdx] = (spendSeries[lastIdx] || 0) + Math.round(inc/320);
   document.getElementById('kpi-tokens').textContent = fmtTokens(totalTokens);
   document.getElementById('kpi-avg-tok').textContent = fmtTokens(Math.round(totalTokens/100));
-  document.getElementById('kpi-tps').textContent = fmtTokens(inc) + '/s';
+  tpsEl.textContent = fmtTokens(inc) + '/s' + (incident ? ' ⚠' : '');
+  tpsEl.className = incident ? 'text-red-400 text-xs mono font-bold' : 'text-cyan-600 text-xs mono';
   chart.update('none');
 }, 1000);
 
@@ -930,6 +959,111 @@ document.getElementById('plan-dist').innerHTML = ['Max20','Max5','Pro'].map(tier
       <div class="text-[10px] text-gray-600">Avg ${fmtMoney(avgSpend)}/person · ${fmtTokens(avgTokens)} tokens avg</div>
     </div>`;
 }).join('');
+
+// ─────────────────────────────────────────────
+// INCIDENT MODE — runaway agent simulation
+// A heavy user's agent gets stuck in a loop: banner drops, feed floods,
+// velocity spikes, their heatmap cell strobes. FinOps kills it 25-40s
+// later and the wasted spend is tallied.
+// ─────────────────────────────────────────────
+const TOKEN_PRICE_PER_M = 15; // blended $/1M tokens for burn estimates
+
+const bannerEl   = document.getElementById('incident-banner');
+const boxEl      = document.getElementById('incident-box');
+const iconEl     = document.getElementById('incident-icon');
+const titleEl    = document.getElementById('incident-title');
+const detailEl   = document.getElementById('incident-detail');
+const burnEl     = document.getElementById('incident-burn');
+const countEl    = document.getElementById('incident-count');
+const wasteEl    = document.getElementById('incident-waste');
+
+let wastedToday = 0;
+let runawaysToday = 0;
+
+function startIncident() {
+  if (incident) return;
+  const candidates = board.slice(0, 25).filter(e => !e.isMaxedNow);
+  if (!candidates.length) return;
+  incident = { e: pick(candidates), iter: 0, tokens: 0, start: Date.now() };
+
+  boxEl.style.borderColor = 'rgba(239,68,68,.55)';
+  boxEl.style.background  = '#170b0d';
+  boxEl.classList.add('banner-alarm');
+  iconEl.textContent = '⚠';
+  titleEl.textContent = 'RUNAWAY AGENT DETECTED';
+  titleEl.className = 'text-sm font-bold text-red-300 tracking-wide';
+  burnEl.className = 'mono text-lg font-bold text-red-400 tabular-nums';
+  bannerEl.style.transform = 'translateY(0)';
+
+  renderSaturation(); // start the strobe immediately
+  incident.loop = setInterval(incidentTick, 450);
+  setTimeout(endIncident, rnd(25000, 40000));
+}
+
+function incidentTick() {
+  const { e } = incident;
+  incident.iter++;
+  const tok = rnd(40, 95) * 1000;
+  incident.tokens += tok;
+
+  // Flood the feed with the stuck loop
+  const t = new Date().toLocaleTimeString('en-US',{hour12:false});
+  const el = document.createElement('div');
+  el.className = 'slide-in flex items-start gap-2 py-1 border-b border-red-950/60';
+  el.innerHTML = `
+    <span class="mono text-[9px] text-red-800 shrink-0 mt-0.5">${t}</span>
+    <div class="min-w-0">
+      <span class="text-[11px] text-red-300 font-medium">${e.name}</span>
+      <span class="text-[11px] text-red-400/70"> agent loop iteration ${incident.iter} · ${Math.round(tok/1000)}K tokens</span>
+    </div>`;
+  feedEl.prepend(el);
+  if (feedEl.children.length > 50) feedEl.removeChild(feedEl.lastChild);
+
+  // Their window fills fast while the agent spins
+  if (!e.isMaxedNow) e.windowUsed = Math.min(e.windowMax, e.windowUsed + Math.round(e.windowMax * 0.04));
+
+  // Banner live stats
+  const burned   = incident.tokens / 1e6 * TOKEN_PRICE_PER_M;
+  const elapsedS = (Date.now() - incident.start) / 1000;
+  const perHr    = burned / elapsedS * 3600;
+  const baselinePerHr = Math.max(1, e.monthlySpend / 240); // ~30 days × 8 hrs
+  detailEl.textContent = `${e.name} · ${e.dept} · iter ${incident.iter} · burn rate ${Math.round(perHr / baselinePerHr)}× baseline — est. ${fmtMoney(perHr)}/hr`;
+  burnEl.textContent = '$' + burned.toFixed(2);
+}
+
+function endIncident() {
+  const { e, iter, tokens, loop, start } = incident;
+  clearInterval(loop);
+  incident = null;
+
+  const burned = tokens / 1e6 * TOKEN_PRICE_PER_M;
+  wastedToday += burned;
+  runawaysToday++;
+  countEl.textContent = runawaysToday;
+  wasteEl.textContent = '$' + Math.round(wastedToday).toLocaleString();
+
+  // Flip banner to resolved state
+  boxEl.classList.remove('banner-alarm');
+  boxEl.style.borderColor = 'rgba(52,211,153,.4)';
+  boxEl.style.background  = '#0a1410';
+  iconEl.textContent = '✓';
+  titleEl.textContent = 'AGENT TERMINATED BY FINOPS';
+  titleEl.className = 'text-sm font-bold text-emerald-300 tracking-wide';
+  detailEl.textContent = `${e.name} · ${iter} iterations · ${fmtTokens(tokens)} tokens · runtime ${Math.round((Date.now() - start) / 1000)}s`;
+  burnEl.className = 'mono text-lg font-bold text-emerald-400 tabular-nums';
+  burnEl.textContent = '$' + burned.toFixed(2) + ' wasted';
+
+  if (e.windowUsed >= e.windowMax && !e.isMaxedNow) maxOut(e);
+  renderSaturation(); // stop the strobe
+
+  setTimeout(() => { bannerEl.style.transform = 'translateY(-120%)'; }, 6000);
+}
+
+// First incident shortly after load so viewers see one, then every ~2-3 min
+setTimeout(function scheduleIncident() {
+  startIncident();
+  setTimeout(scheduleIncident, rnd(110000, 180000));
+}, rnd(14000, 22000));
 </script>
 </body>
 </html>
