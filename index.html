@@ -24,9 +24,6 @@
     @keyframes flash-red { 0%,100%{background:rgba(239,68,68,.08)} 50%{background:rgba(239,68,68,.18)} }
     .flash-alert { animation: flash-red 1.6s ease-in-out 3; }
 
-    @keyframes count-up { from{opacity:.4;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
-    .count-bump { animation: count-up .25s ease-out; }
-
     ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
@@ -51,14 +48,14 @@
         <h1 class="text-xl font-bold tracking-tight">
           <span class="text-cyan-400">Token</span><span class="text-white">Max</span>
         </h1>
-        <span class="hidden sm:inline text-xs text-gray-600 border border-gray-800 rounded px-2 py-0.5">Meridian Systems · 100 employees</span>
+        <span class="hidden sm:inline text-xs text-gray-600 border border-gray-800 rounded px-2 py-0.5">Meridian Systems · 430,000 employees</span>
       </div>
-      <p class="text-[11px] text-gray-600 mt-0.5">AI Token Usage Intelligence · June 2026</p>
+      <p class="text-[11px] text-gray-600 mt-0.5">AI Token Usage Intelligence · June 2026 · Detail view: Eng Platform Org (100 seats)</p>
     </div>
     <div class="flex items-center gap-3 sm:gap-5">
       <!-- Budget burn warning — hidden on xs -->
       <div class="hidden sm:block text-right">
-        <div class="text-[10px] text-gray-500 uppercase tracking-wider">Monthly Budget</div>
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider">Eng Org Budget · Monthly</div>
         <div class="mono text-sm font-bold text-white">$120,000 <span class="text-red-400 text-xs" id="budget-pct">74% burned</span></div>
         <div class="w-full bg-gray-800 rounded-full h-1 mt-1">
           <div id="budget-bar" class="h-1 rounded-full bg-gradient-to-r from-orange-500 to-red-500 bar-fill" style="width:74%"></div>
@@ -414,28 +411,26 @@ setInterval(() => {
 // ─────────────────────────────────────────────
 // LIVE SPEND ODOMETER — epoch-seeded, monotonic
 // Every viewer sees the same number at the same moment.
-// $0.10/sec = ~$259K/month total AI cost (subs + API + tooling).
-// Cents tick every 100ms, dollars every ~10 seconds.
+// $430/sec = ~$1.1B/month across 430,000 employees.
 // ─────────────────────────────────────────────
 const ADOPT_MS    = 1735689600000; // 2025-01-01 00:00:00 UTC
-const RATE_PER_MS = 430 / 1000;   // $430/sec — 430,000 employees × same per-head rate
+const RATE_PER_MS = 430 / 1000;   // $430/sec — 430,000 employees × ~$0.001/sec per head
 const ANNUAL_BUDGET = 10_000_000_000;
 
-const odometerEl  = document.getElementById('odometer');
-const odoMeterDays = document.getElementById('odometer-days');
-const odoOverage  = document.getElementById('odometer-overage');
+// Annualized pace is constant for a fixed rate — compute once
+const ANNUAL_PACE = RATE_PER_MS * 1000 * 86400 * 365.25;
+const OVER_PCT = Math.round((ANNUAL_PACE / ANNUAL_BUDGET - 1) * 100);
+
+const odometerEl = document.getElementById('odometer');
+const odoDaysEl  = document.getElementById('odometer-days');
+document.getElementById('odometer-overage').textContent = OVER_PCT > 0
+  ? `⚠ ${OVER_PCT}% over annual budget pace`
+  : 'Within annual budget';
 
 function updateOdometer() {
   const elapsed = Date.now() - ADOPT_MS;
-  const total   = elapsed * RATE_PER_MS;
-  odometerEl.textContent  = '$' + Math.floor(total).toLocaleString();
-  odoMeterDays.textContent = Math.floor(elapsed / 86400000);
-  const years = elapsed / (365.25 * 86400000);
-  const pace  = Math.round(total / years);
-  const over  = Math.round((pace / ANNUAL_BUDGET - 1) * 100);
-  odoOverage.textContent = over > 0
-    ? `⚠ ${over}% over annual budget pace`
-    : 'Within annual budget';
+  odometerEl.textContent = '$' + Math.floor(elapsed * RATE_PER_MS).toLocaleString();
+  odoDaysEl.textContent  = Math.floor(elapsed / 86400000);
 }
 updateOdometer();
 setInterval(updateOdometer, 100);
@@ -491,23 +486,23 @@ renderBoard();
 // LIVE FEED
 // ─────────────────────────────────────────────
 const ACTIONS = [
-  e => `ran agentic refactor · ${rnd(8,45)}K tokens`,
-  e => `sent ${rnd(800,6000).toLocaleString()}-token code review`,
-  e => `generated test suite · ${rnd(4,22)}K tokens`,
-  e => `completed RAG query · ${rnd(2,8)}K tokens`,
-  e => `debugged CI pipeline · ${rnd(5,30)}K tokens burned`,
-  e => `drafted copy variants · ${rnd(1,4)}K tokens`,
-  e => `analyzed quarterly data · ${rnd(6,28)}K tokens`,
-  e => `summarized doc dump · ${rnd(3,12)}K tokens`,
-  e => `rewrote component · ${rnd(10,55)}K tokens`,
-  e => `ran multi-step agent task · ${rnd(15,80)}K tokens`,
+  () => `ran agentic refactor · ${rnd(8,45)}K tokens`,
+  () => `sent ${rnd(800,6000).toLocaleString()}-token code review`,
+  () => `generated test suite · ${rnd(4,22)}K tokens`,
+  () => `completed RAG query · ${rnd(2,8)}K tokens`,
+  () => `debugged CI pipeline · ${rnd(5,30)}K tokens burned`,
+  () => `drafted copy variants · ${rnd(1,4)}K tokens`,
+  () => `analyzed quarterly data · ${rnd(6,28)}K tokens`,
+  () => `summarized doc dump · ${rnd(3,12)}K tokens`,
+  () => `rewrote component · ${rnd(10,55)}K tokens`,
+  () => `ran multi-step agent task · ${rnd(15,80)}K tokens`,
 ];
 
 const feedEl = document.getElementById('live-feed');
 
 function addFeed() {
   const e = pick(employees);
-  const action = pick(ACTIONS)(e);
+  const action = pick(ACTIONS)();
   const dcolor = DEPTS[e.dept]?.color || '#9ca3af';
   const t = new Date().toLocaleTimeString('en-US',{hour12:false});
   const el = document.createElement('div');
@@ -546,20 +541,28 @@ function renderAlerts() {
 }
 renderAlerts();
 
-// Simulate quota events
-setInterval(() => {
-  // Randomly max out a heavy user
-  const candidates = board.slice(0, 35).filter(e => !e.isMaxedNow);
-  if (candidates.length && Math.random() < .4) {
-    const e = pick(candidates);
-    e.isMaxedNow = true;
-    maxedToday++;
-    document.getElementById('kpi-maxed').textContent = maxedToday;
+// Shared quota-block lifecycle: block, count the hit, auto-unblock after a
+// simulated window reset (20-45s demo ≈ 5hr real) and free up the window
+function maxOut(e) {
+  e.isMaxedNow = true;
+  e.windowUsed = e.windowMax;
+  maxedToday++;
+  document.getElementById('kpi-maxed').textContent = maxedToday;
+  renderAlerts();
+  renderBoard();
+  setTimeout(() => {
+    e.isMaxedNow = false;
+    e.windowUsed = Math.round(e.windowMax * rnd(5, 25) / 100);
     renderAlerts();
     renderBoard();
-    // Unmax after simulated window reset (30s demo = 5hr real)
-    setTimeout(() => { e.isMaxedNow = false; renderAlerts(); renderBoard(); }, rnd(20000,45000));
-  }
+    renderSaturation();
+  }, rnd(20000, 45000));
+}
+
+// Simulate quota events — randomly max out a heavy user
+setInterval(() => {
+  const candidates = board.slice(0, 35).filter(e => !e.isMaxedNow);
+  if (candidates.length && Math.random() < .4) maxOut(pick(candidates));
 }, 9000);
 
 // ─────────────────────────────────────────────
@@ -580,8 +583,10 @@ function renderSaturation() {
 renderSaturation();
 setInterval(() => {
   employees.forEach(e => {
-    if (!e.isMaxedNow) e.windowUsed = Math.min(e.windowMax, e.windowUsed + rnd(0, 800));
-    if (e.windowUsed >= e.windowMax && !e.isMaxedNow) e.isMaxedNow = true;
+    if (e.isMaxedNow) return;
+    // Accrue proportionally to the tier's cap so Pro doesn't saturate faster
+    e.windowUsed = Math.min(e.windowMax, e.windowUsed + rnd(0, Math.round(e.windowMax * 0.02)));
+    if (e.windowUsed >= e.windowMax) maxOut(e);
   });
   renderSaturation();
 }, 3000);
@@ -590,10 +595,8 @@ setInterval(() => {
 // DEPT BARS
 // ─────────────────────────────────────────────
 const deptSpend = {};
-const deptTokens = {};
 for (const e of employees) {
-  deptSpend[e.dept]  = (deptSpend[e.dept]  || 0) + e.monthlySpend;
-  deptTokens[e.dept] = (deptTokens[e.dept] || 0) + e.tokensMonth;
+  deptSpend[e.dept] = (deptSpend[e.dept] || 0) + e.monthlySpend;
 }
 const maxDS = Math.max(...Object.values(deptSpend));
 
@@ -627,8 +630,8 @@ for (let i = 29; i >= 0; i--) {
   const noise = .8 + Math.random()*.4;
   const dayTokens = Math.round((totalTokens/17) * prog * noise);
   const daySpend  = Math.round((totalSpend/17)  * prog * noise);
-  tokenSeries.push(i >= 13 ? null : dayTokens);  // only 17 days of data
-  spendSeries.push(i >= 13 ? null : daySpend);
+  tokenSeries.push(i >= 17 ? null : dayTokens);  // most recent 17 days populated (matches /17 projections)
+  spendSeries.push(i >= 17 ? null : daySpend);
 }
 
 const chart = new Chart(document.getElementById('trend-chart'), {
@@ -883,8 +886,9 @@ new Chart(document.getElementById('backlog-chart'), {
 // FREQUENT MAXERS
 // ─────────────────────────────────────────────
 const freqMaxers = [...employees].sort((a,b)=>b.timesMaxedMonth - a.timesMaxedMonth).slice(0,6);
+const topMaxHits = freqMaxers[0].timesMaxedMonth || 1;
 document.getElementById('frequent-maxers').innerHTML = freqMaxers.map((e,i) => {
-  const pct = Math.round(e.timesMaxedMonth/freqMaxers[0].timesMaxedMonth*100);
+  const pct = Math.round(e.timesMaxedMonth/topMaxHits*100);
   return `
     <div class="flex items-center gap-2">
       <span class="mono text-[10px] text-gray-700 w-4">${i+1}</span>
@@ -905,24 +909,25 @@ document.getElementById('frequent-maxers').innerHTML = freqMaxers.map((e,i) => {
 // PLAN DISTRIBUTION
 // ─────────────────────────────────────────────
 const tierGroups = {
-  Max20: { n:0, spend:0, color:'#c084fc' },
-  Max5:  { n:0, spend:0, color:'#60a5fa' },
-  Pro:   { n:0, spend:0, color:'#4b5563' },
+  Max20: { n:0, spend:0 },
+  Max5:  { n:0, spend:0 },
+  Pro:   { n:0, spend:0 },
 };
 employees.forEach(e => { tierGroups[e.tier].n++; tierGroups[e.tier].spend += e.monthlySpend; });
 const tierCost = { Max20: 200, Max5: 100, Pro: 20 }; // monthly sub cost
 
 document.getElementById('plan-dist').innerHTML = ['Max20','Max5','Pro'].map(tier => {
   const g = tierGroups[tier];
-  const subCost = tierCost[tier] * g.n;
+  const avgSpend  = g.n > 0 ? Math.round(g.spend / g.n) : 0;
+  const avgTokens = g.n > 0 ? Math.round(g.spend * 310 / g.n) : 0;
   return `
     <div class="rounded-lg px-3 py-2.5 border border-gray-800" style="background:rgba(255,255,255,.02)">
       <div class="flex items-center justify-between mb-1">
         <span class="tier-badge ${tier==='Max20'?'tier-max20':tier==='Max5'?'tier-max5':'tier-pro'}">${tier}</span>
         <span class="mono text-xs font-semibold text-gray-200">${fmtMoney(g.spend)}/mo</span>
       </div>
-      <div class="text-[10px] text-gray-500">${g.n} employees · ${fmtMoney(subCost)} in subscriptions</div>
-      <div class="text-[10px] text-gray-600">Avg ${fmtMoney(Math.round(g.spend/g.n))}/person · ${g.n>0?fmtTokens(Math.round(tierGroups[tier].spend*310/g.n)):0} tokens avg</div>
+      <div class="text-[10px] text-gray-500">${g.n} employees · ${fmtMoney(tierCost[tier] * g.n)} in subscriptions</div>
+      <div class="text-[10px] text-gray-600">Avg ${fmtMoney(avgSpend)}/person · ${fmtTokens(avgTokens)} tokens avg</div>
     </div>`;
 }).join('');
 </script>

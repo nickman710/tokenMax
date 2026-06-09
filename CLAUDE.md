@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A single-page, zero-build AI token usage dashboard for a fictional 100-person company ("Meridian Systems"). It surfaces the real "token maxing" phenomenon — employees burning through 5-hour rolling Claude windows, ballooning per-seat costs, and CFO-level spend risk — through fake live data.
+A single-page, zero-build AI token usage dashboard for a fictional 430,000-employee company ("Meridian Systems"). The detailed panels show a 100-seat sample ("Eng Platform Org"); the spend odometer and header reflect company-wide scale. It surfaces the real "token maxing" phenomenon — employees burning through 5-hour rolling Claude windows, ballooning per-seat costs, and CFO-level spend risk — through fake live data.
+
+Deployed to GitHub Pages via `.github/workflows/deploy.yml` on every push to `main`: https://nickman710.github.io/tokenMax/
 
 ## Running It
 
@@ -27,12 +29,17 @@ Single file: `index.html` — all markup, styles, and logic in one place.
 - Dept spend and token totals derived on the fly
 
 **Live simulation (setInterval loops):**
+- Spend odometer: every 100ms — `(Date.now() - Jan 1 2025 epoch) × $430/sec`. Deterministic, identical for all viewers, monotonic. Annual-pace overage vs the $10B budget is a compile-time constant
 - Feed entries: every 1.1s — picks a random employee, appends a fake action to the activity log
 - Token counter: every 1s — increments `totalTokens` by 18K–72K, updates KPI card and last chart data point
-- Quota events: every 9s — randomly maxes out a heavy user (top 35), auto-unblocks after 20–45s
-- Window saturation grid: every 3s — nudges each employee's `windowUsed` upward, turns cell red when full
+- Page-view token ticker: every 1.2s — header counter starting at ~1.8K–3.2K, +28–72/tick
+- Quota events: every 9s — randomly maxes out a heavy user (top 35) via the shared `maxOut(e)` helper, which blocks, counts the hit, and auto-unblocks after 20–45s **resetting `windowUsed`** (without the reset the saturation grid turns permanently red)
+- Window saturation grid: every 3s — accrues `windowUsed` proportionally to each tier's cap (`windowMax * 0.02` max per tick) so Pro doesn't fill faster than Max20; full windows route through `maxOut(e)`
 
-**Chart:** Chart.js line chart with dual Y axes (tokens left, spend right), 30-day series with only the first 17 days populated (simulating mid-month).
+**Charts (Chart.js):**
+- 30-day trend: dual Y axes (tokens left, spend right), only the most recent 17 days populated — matches the `/17` month-to-date projection math
+- Cost Paradox: 12-month — AI-projected savings (dashed) vs last-year baseline vs current = baseline + tripling AI subscriptions
+- Productivity Debt: dual axis — headcount falling in three layoff waves vs backlog spiking after each cut
 
 ## Key Design Decisions
 
